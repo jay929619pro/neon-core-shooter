@@ -2,7 +2,8 @@ export enum GameState {
   START = "START",
   PLAYING = "PLAYING",
   UPGRADING = "UPGRADING",
-  GAME_OVER = "GAME_OVER"
+  GAME_OVER = "GAME_OVER",
+  BESTIARY = "bestiary"
 }
 
 export enum UpgradeTag {
@@ -107,7 +108,7 @@ export interface Enemy {
   hitFlash: number;
   speed: number;
   cooldown?: number;
-  bossVariant?: "core" | "sentinel" | "hive"; // [NEW] Boss Variant
+  bossVariant?: "core" | "sentinel" | "hive" | "phantom" | "colossus" | "tempest" | "weaver" | "singularity"; // [NEW] Advanced Roster
 }
 
 export interface Obstacle {

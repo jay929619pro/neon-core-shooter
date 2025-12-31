@@ -611,6 +611,14 @@ export class GameEngine {
 
   private fire() {
     eventBus.emit(EVENTS.TRIGGER_SOUND, "fire");
+
+    // [NERF] Black Hole rate limit
+    if (this.player.weaponMode === WeaponMode.BLACK_HOLE) {
+      // Enforce slower fire rate for Black Hole (e.g. 55 frames)
+      if (this.frameCount % 55 !== 0) return;
+    }
+
+    const { x, y, weaponMode } = this.player;
     const currentDamage = this.calculateDamage();
     const createB = (ox: number, isS = false) => {
       const mode = this.player.weaponMode === WeaponMode.BLACK_HOLE && !isS ? WeaponMode.BLACK_HOLE : WeaponMode.STANDARD;
@@ -688,6 +696,8 @@ export class GameEngine {
   }
 
   private shake(i: number) {
+    // [VISUAL POLISH] Disabled mostly to prevent "lag" feel
+    if (i < 30) return;
     this.shakeTimer = Math.max(this.shakeTimer, i);
     eventBus.emit(EVENTS.SHAKE_SCREEN, i);
   }

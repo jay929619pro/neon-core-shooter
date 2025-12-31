@@ -1,5 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
+import { Bestiary } from './Bestiary';
 import { GameState, UpgradeOption, UpgradeTag } from './types';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, UPGRADE_POOL } from './constants';
 import { GameEngine } from './gameEngine';
@@ -317,7 +318,12 @@ const App: React.FC = () => {
             </div>
         )}
 
-        {gameState !== GameState.START && (
+        {/* Bestiary Overlay */}
+        {gameState === GameState.BESTIARY && (
+          <Bestiary onBack={() => setGameState(GameState.START)} />
+        )}
+
+        {gameState !== GameState.START && gameState !== GameState.BESTIARY && (
           <div className="absolute top-0 left-0 w-full p-8 pointer-events-none flex flex-col gap-5 animate-in fade-in slide-in-from-top-4 duration-700">
             <div className="flex justify-between items-start">
               <div className="flex flex-col">
@@ -364,6 +370,13 @@ const App: React.FC = () => {
             >
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#00d4ff]/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
               (初始化核心)
+            </button>
+            
+            <button
+               onClick={() => setGameState(GameState.BESTIARY)}
+               className="mt-6 px-12 py-4 bg-white/5 hover:bg-white/10 text-[#00d4ff] rounded-xl border border-[#00d4ff]/20 orbitron font-bold transition-all hover:scale-105 active:scale-95 text-base tracking-widest"
+            >
+               NEON DATABASE // 图鉴
             </button>
           </div>
         )}

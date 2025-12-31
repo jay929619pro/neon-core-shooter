@@ -21,13 +21,18 @@ export class EnemyFactory {
     let y = -arch.size;
 
     // Special spawn for Boss
-    let variant: "core" | "sentinel" | "hive" | undefined;
+    let variant: "core" | "sentinel" | "hive" | "phantom" | "colossus" | "tempest" | "weaver" | "singularity" | undefined;
     if (type === EnemyType.BOSS) {
       x = canvasWidth / 2;
       y = -150;
       if (level <= 5) variant = "core";
       else if (level <= 10) variant = "sentinel";
-      else variant = "hive";
+      else if (level <= 15) variant = "hive";
+      else if (level <= 20) variant = "phantom";
+      else if (level <= 25) variant = "colossus";
+      else if (level <= 30) variant = "tempest";
+      else if (level <= 35) variant = "weaver";
+      else variant = "singularity";
     }
 
     const data: EnemyData = {
@@ -37,7 +42,24 @@ export class EnemyFactory {
       hp,
       maxHp: hp,
       size: arch.size,
-      color: variant === "core" ? "#ff8800" : variant === "sentinel" ? "#00ffff" : variant === "hive" ? "#aa00aa" : arch.color,
+      color:
+        variant === "core"
+          ? "#ff8800"
+          : variant === "sentinel"
+          ? "#00ffff"
+          : variant === "hive"
+          ? "#aa00aa"
+          : variant === "colossus"
+          ? "#ff0000"
+          : variant === "phantom"
+          ? "#cccccc"
+          : variant === "tempest"
+          ? "#000088" // Dark Blue
+          : variant === "weaver"
+          ? "#00ff00" // Green
+          : variant === "singularity"
+          ? "#000000" // Black (with stroke)
+          : arch.color,
       shakeX: 0,
       shakeY: 0,
       hitFlash: 0,

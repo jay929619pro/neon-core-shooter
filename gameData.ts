@@ -10,8 +10,9 @@ export class BalanceController {
   static getEnemyHP(type: EnemyType, level: number): number {
     const arch = ENEMY_ARCHETYPES[type];
     const baseHP = arch.hpMultiplier * 3; // [NERF] 5 -> 3
-    // Formula: BaseHP * (1.20)^(Level-1) [NERF] 1.25 -> 1.20
-    const scaledHP = baseHP * Math.pow(1.2, level - 1);
+    // Formula: BaseHP * (1 + (Level-1) * 0.5 + (Level-1)^1.4 * 0.1)
+    // This is smoother than previous 1.2^L
+    const scaledHP = baseHP * (1 + (level - 1) * 0.5 + Math.pow(level - 1, 1.4) * 0.1);
 
     // Boss HP jump at level 5/10/15...
     if (type === EnemyType.BOSS) {
