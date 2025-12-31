@@ -107,6 +107,7 @@ export interface Enemy {
   hitFlash: number;
   speed: number;
   cooldown?: number;
+  bossVariant?: "core" | "sentinel" | "hive"; // [NEW] Boss Variant
 }
 
 export interface Obstacle {

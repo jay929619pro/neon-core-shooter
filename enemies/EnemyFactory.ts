@@ -21,9 +21,13 @@ export class EnemyFactory {
     let y = -arch.size;
 
     // Special spawn for Boss
+    let variant: "core" | "sentinel" | "hive" | undefined;
     if (type === EnemyType.BOSS) {
       x = canvasWidth / 2;
       y = -150;
+      if (level <= 5) variant = "core";
+      else if (level <= 10) variant = "sentinel";
+      else variant = "hive";
     }
 
     const data: EnemyData = {
@@ -33,12 +37,13 @@ export class EnemyFactory {
       hp,
       maxHp: hp,
       size: arch.size,
-      color: arch.color,
+      color: variant === "core" ? "#ff8800" : variant === "sentinel" ? "#00ffff" : variant === "hive" ? "#aa00aa" : arch.color,
       shakeX: 0,
       shakeY: 0,
       hitFlash: 0,
       speed: arch.speedBase + (type === EnemyType.BOSS ? 0 : Math.random() * 2),
-      cooldown: type === EnemyType.BOSS ? 60 : 0
+      cooldown: type === EnemyType.BOSS ? 60 : 0,
+      bossVariant: variant
     };
 
     switch (type) {
