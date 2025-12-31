@@ -186,7 +186,8 @@ const App: React.FC = () => {
         const dx = (Math.random() - 0.5) * intensity * damp;
         const dy = (Math.random() - 0.5) * intensity * damp;
         setScreenShake({ x: dx, y: dy });
-        setTimeout(() => setScreenShake({ x: 0, y: 0 }), 50);
+        const duration = Math.max(50, Math.min(intensity * 8, 300)); 
+        setTimeout(() => setScreenShake({ x: 0, y: 0 }), duration);
     };
 
     eventBus.on(EVENTS.SCORE_UPDATED, onScoreUpdate);

@@ -112,6 +112,7 @@ export class GameEngine {
     this.player.currentHealth = Math.max(0, this.player.currentHealth - amount);
     this.player.invincibleTimer = INVINCIBLE_TIME;
     this.shake(20);
+    this.hitStopTimer = 10; // Freeze for 10 frames on damage
     eventBus.emit(EVENTS.TRIGGER_SOUND, "explosion");
 
     // 触发受击对应位置心的弹性动画
@@ -260,6 +261,13 @@ export class GameEngine {
   private update() {
     this.frameCount++;
     const deltaTime = 1000 / 60; // Assuming 60fps
+
+    if (this.hitStopTimer > 0) {
+      this.hitStopTimer--;
+      // Keep shake active during hitstop for impact feel
+      if (this.shakeTimer > 0) this.shakeTimer--;
+      return;
+    }
 
     if (this.player.invincibleTimer > 0) {
       this.player.invincibleTimer -= deltaTime;
@@ -539,6 +547,7 @@ export class GameEngine {
   private handleEnemyDeath(e: Enemy, index: number) {
     this.lastKillFrame = this.frameCount;
     this.mercyBoost = 0;
+    this.hitStopTimer = 4; // Freeze for 4 frames on kill
     eventBus.emit(EVENTS.TRIGGER_SOUND, "kill");
 
     if (e.type === EnemyType.SPLITTER) {
