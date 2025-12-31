@@ -1,39 +1,43 @@
-
 export enum GameState {
-  START = 'START',
-  PLAYING = 'PLAYING',
-  UPGRADING = 'UPGRADING',
-  GAME_OVER = 'GAME_OVER'
+  START = "START",
+  PLAYING = "PLAYING",
+  UPGRADING = "UPGRADING",
+  GAME_OVER = "GAME_OVER"
 }
 
 export enum UpgradeTag {
-  KINETIC = '实弹',
-  ENERGY = '能量',
-  BLAST = '爆炸',
-  VITALITY = '生命'
+  KINETIC = "实弹",
+  ENERGY = "能量",
+  BLAST = "爆炸",
+  VITALITY = "生命"
 }
 
 export enum UpgradeType {
-  FIRE_RATE = 'FIRE_RATE',
-  SIDE_GUNS = 'SIDE_GUNS',
-  BIG_BULLET = 'BIG_BULLET',
-  CANNON = 'CANNON',
-  RANGE_BOOST = 'RANGE_BOOST',
-  VOLT_SHOT = 'VOLT_SHOT',
-  HEALTH_UP = 'HEALTH_UP'
+  FIRE_RATE = "FIRE_RATE",
+  SIDE_GUNS = "SIDE_GUNS",
+  BIG_BULLET = "BIG_BULLET",
+  CANNON = "CANNON",
+  RANGE_BOOST = "RANGE_BOOST",
+  VOLT_SHOT = "VOLT_SHOT",
+  HEALTH_UP = "HEALTH_UP"
 }
 
 export enum WeaponMode {
-  STANDARD = 'STANDARD',
-  BLACK_HOLE = 'BLACK_HOLE'
+  STANDARD = "STANDARD",
+  BLACK_HOLE = "BLACK_HOLE"
 }
 
 export enum EnemyType {
-  BASIC = 'BASIC',
-  CHARGER = 'CHARGER',
-  SPLITTER = 'SPLITTER',
-  SHOOTER = 'SHOOTER',
-  BOSS = 'BOSS'
+  BASIC = "BASIC",
+  CHARGER = "CHARGER",
+  SPLITTER = "SPLITTER",
+  SHOOTER = "SHOOTER",
+  BOSS = "BOSS",
+  HEALER = "HEALER",
+  SHIELDER = "SHIELDER",
+  KAMIKAZE = "KAMIKAZE",
+  SNIPER = "SNIPER",
+  SUMMONER = "SUMMONER"
 }
 
 export interface UpgradeOption {
@@ -78,6 +82,7 @@ export interface Bullet {
   vy: number;
   trail: { x: number; y: number }[];
   isBlackHole?: boolean;
+  life?: number; // [NEW] For Black Hole decay
 }
 
 export interface EnemyBullet {
