@@ -6,22 +6,37 @@ import { GameEngine } from './gameEngine';
 import { eventBus, EVENTS } from './eventBus';
 import { BalanceController } from './gameData';
 
-// 补全：霓虹音效管理器
+// 霓虹音效管理器 - 完整实现
 class SoundManager {
   private audioCtx: AudioContext | null = null;
+  private masterGain: GainNode | null = null;
 
   private init() {
-    if (!this.audioCtx) this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    if (!this.audioCtx) {
+      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      this.audioCtx = new AudioContextClass();
+      this.masterGain = this.audioCtx.createGain();
+      this.masterGain.gain.value = 0.3; // 全局音量控制
+      this.masterGain.connect(this.audioCtx.destination);
+    }
+
   }
 
   public play(type: string) {
     this.init();
-    if (!this.audioCtx) return;
+    if (!this.audioCtx || !this.masterGain) return;
+    
+    // 自动恢复被挂起的 AudioContext (浏览器策略)
+    if (this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume();
+    }
+
     const ctx = this.audioCtx;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
+    
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this.masterGain);
 
     const now = ctx.currentTime;
 
@@ -30,15 +45,24 @@ class SoundManager {
         osc.type = 'square';
         osc.frequency.setValueAtTime(800, now);
         osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
-        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.setValueAtTime(0.15, now); // 略微调高开火音量
         gain.gain.linearRampToValueAtTime(0, now + 0.1);
         osc.start(); osc.stop(now + 0.1);
+        break;
+      case 'boss_fire':
+        // 新增 Boss 攻击音效：低沉且有压迫感的锯齿波
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.linearRampToValueAtTime(50, now + 0.3);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.3);
+        osc.start(); osc.stop(now + 0.3);
         break;
       case 'kill':
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(200, now);
         osc.frequency.linearRampToValueAtTime(50, now + 0.2);
-        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.setValueAtTime(0.15, now);
         gain.gain.linearRampToValueAtTime(0, now + 0.2);
         osc.start(); osc.stop(now + 0.2);
         break;
@@ -46,7 +70,7 @@ class SoundManager {
         osc.type = 'triangle';
         osc.frequency.setValueAtTime(150, now);
         osc.frequency.exponentialRampToValueAtTime(40, now + 0.4);
-        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.setValueAtTime(0.3, now);
         gain.gain.linearRampToValueAtTime(0, now + 0.4);
         osc.start(); osc.stop(now + 0.4);
         break;
@@ -54,30 +78,49 @@ class SoundManager {
         osc.type = 'sine';
         osc.frequency.setValueAtTime(1200, now);
         osc.frequency.exponentialRampToValueAtTime(3000, now + 0.05);
-        gain.gain.setValueAtTime(0.03, now);
+        gain.gain.setValueAtTime(0.1, now);
         gain.gain.linearRampToValueAtTime(0, now + 0.05);
         osc.start(); osc.stop(now + 0.05);
         break;
       case 'levelup':
         osc.type = 'sine';
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.6);
+        // 和弦效果
         [440, 554, 659, 880].forEach((f, i) => {
-          osc.frequency.setValueAtTime(f, now + i * 0.1);
+           const o = ctx.createOscillator();
+           o.type = 'sine';
+           o.frequency.value = f;
+           o.connect(gain);
+           o.start();
+           o.stop(now + 0.6);
         });
-        gain.gain.setValueAtTime(0.1, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.5);
-        osc.start(); osc.stop(now + 0.5);
-        break;
+        // 主振荡器这里不需要了，因为上面创建了多个
+        return; 
       case 'evo':
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(100, now);
         osc.frequency.exponentialRampToValueAtTime(1200, now + 1.0);
-        gain.gain.setValueAtTime(0.1, now);
+        // 添加颤音效果
+        const lfo = ctx.createOscillator();
+        lfo.frequency.value = 15;
+        const lfoGain = ctx.createGain();
+        lfoGain.gain.value = 50;
+        lfo.connect(lfoGain);
+        lfoGain.connect(osc.frequency);
+        lfo.start(); lfo.stop(now + 1.2);
+
+        gain.gain.setValueAtTime(0.2, now);
         gain.gain.linearRampToValueAtTime(0, now + 1.2);
         osc.start(); osc.stop(now + 1.2);
         break;
     }
   }
 }
+
+import { PersistenceManager } from './persistence';
+
+// ... (SoundManager class remains unchanged)
 
 const soundManager = new SoundManager();
 
@@ -91,6 +134,11 @@ const App: React.FC = () => {
   const [score, setScore] = useState(0);
   const [displayScore, setDisplayScore] = useState(0);
   const [availableUpgrades, setAvailableUpgrades] = useState<UpgradeOption[]>([]);
+  const [screenShake, setScreenShake] = useState({ x: 0, y: 0 });
+  
+  // Persistence State
+  const [profile, setProfile] = useState(PersistenceManager.load());
+  const sessionKillsRef = useRef(0);
 
   useEffect(() => {
     if (displayScore < score) {
@@ -113,17 +161,40 @@ const App: React.FC = () => {
       setExp(data.exp);
       setMaxExp(data.maxExp);
     };
+    
+    // Kill Tracker
+    const onEnemyKilled = () => {
+      sessionKillsRef.current++;
+    };
+
     const onGameOver = () => {
       soundManager.play('explosion');
       setGameState(GameState.GAME_OVER);
+      
+      // Save Progress
+      PersistenceManager.updateHighScore(score);
+      PersistenceManager.incrementStats(sessionKillsRef.current);
+      // Refresh UI
+      setProfile(PersistenceManager.load());
     };
+    
     const onSoundTrigger = (type: string) => soundManager.play(type);
+    
+    const onShake = (intensity: number) => {
+        const damp = 0.5; 
+        const dx = (Math.random() - 0.5) * intensity * damp;
+        const dy = (Math.random() - 0.5) * intensity * damp;
+        setScreenShake({ x: dx, y: dy });
+        setTimeout(() => setScreenShake({ x: 0, y: 0 }), 50);
+    };
 
     eventBus.on(EVENTS.SCORE_UPDATED, onScoreUpdate);
     eventBus.on(EVENTS.LEVEL_UP, onLevelUp);
     eventBus.on(EVENTS.EXP_UPDATED, onExpUpdate);
+    eventBus.on(EVENTS.ENEMY_KILLED, onEnemyKilled);
     eventBus.on(EVENTS.GAME_OVER, onGameOver);
     eventBus.on(EVENTS.TRIGGER_SOUND, onSoundTrigger);
+    eventBus.on(EVENTS.SHAKE_SCREEN, onShake);
 
     if (canvasRef.current && !engineRef.current) {
       const ctx = canvasRef.current.getContext('2d');
@@ -134,10 +205,12 @@ const App: React.FC = () => {
       eventBus.off(EVENTS.SCORE_UPDATED, onScoreUpdate);
       eventBus.off(EVENTS.LEVEL_UP, onLevelUp);
       eventBus.off(EVENTS.EXP_UPDATED, onExpUpdate);
+      eventBus.off(EVENTS.ENEMY_KILLED, onEnemyKilled);
       eventBus.off(EVENTS.GAME_OVER, onGameOver);
       eventBus.off(EVENTS.TRIGGER_SOUND, onSoundTrigger);
+      eventBus.off(EVENTS.SHAKE_SCREEN, onShake);
     };
-  }, []);
+  }, [score]); // Score dependency only for closure access if needed, though most logic is event-driven
 
   const handleUpgradeSelect = (upgrade: UpgradeOption) => {
     if (engineRef.current) {
@@ -151,6 +224,7 @@ const App: React.FC = () => {
   const startGame = () => {
     setGameState(GameState.PLAYING);
     setScore(0); setDisplayScore(0); setLevel(1); setExp(0); setMaxExp(BalanceController.getXPRequired(1));
+    sessionKillsRef.current = 0; // Reset kills
     if (engineRef.current) {
       engineRef.current.reset();
       engineRef.current.start();
@@ -169,7 +243,10 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-[#050505] p-0 font-sans text-neutral-200 overflow-hidden">
-      <div className="relative border-0 sm:border border-white/5 rounded-none sm:rounded-[2.5rem] overflow-hidden aspect-[9/16] h-screen sm:h-[92vh] max-w-full bg-[#0a0a0a] shadow-[0_0_80px_rgba(0,0,0,0.8)]">
+      <div 
+        className="relative border-0 sm:border border-white/5 rounded-none sm:rounded-[2.5rem] overflow-hidden aspect-[9/16] h-screen sm:h-[92vh] max-w-full bg-[#0a0a0a] shadow-[0_0_80px_rgba(0,0,0,0.8)] transition-transform duration-75 will-change-transform"
+        style={{ transform: `translate(${screenShake.x}px, ${screenShake.y}px)` }}
+      >
         <canvas 
           ref={canvasRef} 
           width={CANVAS_WIDTH} 
@@ -210,7 +287,14 @@ const App: React.FC = () => {
             <h1 className="text-6xl font-black text-white orbitron mb-4 tracking-tighter italic">
               NEON<span className="text-[#00d4ff]">CORE</span>
             </h1>
-            <p className="text-white/20 mb-24 orbitron text-[10px] tracking-[0.8em] font-bold">协议版本 2.5 // 深度进化</p>
+            <p className="text-white/20 mb-8 orbitron text-[10px] tracking-[0.8em] font-bold">协议版本 2.5 // 深度进化</p>
+            
+            {/* BEST SCORE DISPLAY */}
+            <div className="mb-16 bg-white/5 px-6 py-2 rounded-full border border-white/10">
+               <span className="text-white/40 text-[10px] tracking-[0.2em] font-black mr-3">BEST RECORD</span>
+               <span className="text-[#00d4ff] font-black orbitron">{BalanceController.formatValue(profile.highScore)}</span>
+            </div>
+
             <button 
               onClick={startGame} 
               className="group relative px-24 py-7 bg-white/5 hover:bg-white/10 text-white rounded-2xl border border-white/20 orbitron font-black transition-all transform active:scale-90 text-xl overflow-hidden shadow-[inset_0_0_20px_rgba(255,255,255,0.02)]"
@@ -220,6 +304,7 @@ const App: React.FC = () => {
             </button>
           </div>
         )}
+
 
         {gameState === GameState.UPGRADING && (
           <div className="absolute inset-0 bg-black/40 backdrop-blur-[16px] flex flex-col items-center justify-center p-10 z-30 animate-in fade-in duration-500">
