@@ -139,6 +139,7 @@ const App: React.FC = () => {
   // Persistence State
   const [profile, setProfile] = useState(PersistenceManager.load());
   const sessionKillsRef = useRef(0);
+  const [isPaused, setIsPaused] = useState(false);
 
   useEffect(() => {
     if (displayScore < score) {
@@ -202,6 +203,7 @@ const App: React.FC = () => {
     }
 
     return () => {
+      // Cleanup events
       eventBus.off(EVENTS.SCORE_UPDATED, onScoreUpdate);
       eventBus.off(EVENTS.LEVEL_UP, onLevelUp);
       eventBus.off(EVENTS.EXP_UPDATED, onExpUpdate);
@@ -211,6 +213,32 @@ const App: React.FC = () => {
       eventBus.off(EVENTS.SHAKE_SCREEN, onShake);
     };
   }, [score]); // Score dependency only for closure access if needed, though most logic is event-driven
+  
+  // Input Handler for Pause
+  useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+          if (e.key === 'Escape' && gameState === GameState.PLAYING) {
+              handleTogglePause();
+          }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [gameState]); // Re-bind when gameState changes
+
+  const handleTogglePause = () => {
+      if (engineRef.current) {
+          const paused = engineRef.current.togglePause();
+          setIsPaused(paused);
+      }
+  };
+
+  const handleQuit = () => {
+      if (engineRef.current) {
+          engineRef.current.reset(); // Clean reset
+      }
+      setGameState(GameState.START);
+      setIsPaused(false);
+  };
 
   const handleUpgradeSelect = (upgrade: UpgradeOption) => {
     if (engineRef.current) {
@@ -253,6 +281,40 @@ const App: React.FC = () => {
           height={CANVAS_HEIGHT} 
           className="h-full w-auto block bg-[#0a0a0a] mx-auto cursor-none" 
         />
+        
+        {/* Pause Button */}
+        {gameState === GameState.PLAYING && (
+            <button 
+                onClick={handleTogglePause}
+                className="absolute top-6 right-6 z-20 text-white/50 hover:text-white transition-colors p-2"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="6" y="4" width="4" height="16"></rect>
+                    <rect x="14" y="4" width="4" height="16"></rect>
+                </svg>
+            </button>
+        )}
+
+        {/* Pause Menu Overlay */}
+        {isPaused && gameState === GameState.PLAYING && (
+            <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center animate-in fade-in duration-200">
+                <h2 className="text-4xl font-black text-white tracking-wider mb-8 orbitron">PAUSED</h2>
+                <div className="flex flex-col gap-4 w-48">
+                    <button 
+                        onClick={handleTogglePause}
+                        className="w-full py-3 bg-[#00d4ff] text-black font-bold tracking-widest hover:bg-white transition-colors skew-x-[-10deg]"
+                    >
+                        RESUME
+                    </button>
+                    <button 
+                        onClick={handleQuit}
+                        className="w-full py-3 bg-transparent border border-white/20 text-white/70 hover:text-white hover:border-white transition-colors tracking-widest skew-x-[-10deg]"
+                    >
+                        QUIT
+                    </button>
+                </div>
+            </div>
+        )}
 
         {gameState !== GameState.START && (
           <div className="absolute top-0 left-0 w-full p-8 pointer-events-none flex flex-col gap-5 animate-in fade-in slide-in-from-top-4 duration-700">

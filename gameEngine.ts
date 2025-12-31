@@ -68,6 +68,11 @@ export class GameEngine {
   private lastKillFrame = 0;
   private mercyBoost = 0;
 
+  // Juice Mechanics
+  private hitStopTimer = 0;
+  private cameraZoom = 1.0;
+  private zoomTarget = 1.0;
+
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
     this.initEvents();
@@ -231,8 +236,18 @@ export class GameEngine {
   public resume() {
     if (this.isPaused) {
       this.isPaused = false;
+      this.zoomTarget = 1.0; // Reset zoom on resume
       this.loop();
     }
+  }
+
+  public togglePause(): boolean {
+    if (this.isPaused) {
+      this.resume();
+    } else {
+      this.isPaused = true;
+    }
+    return this.isPaused;
   }
 
   private loop = () => {
