@@ -1,4 +1,12 @@
-import { CANVAS_WIDTH, CANVAS_HEIGHT, INITIAL_FIRE_RATE, COLORS, INITIAL_DAMAGE, INITIAL_BULLET_SIZE, INVINCIBLE_TIME } from "./constants";
+import {
+  CANVAS_WIDTH,
+  CANVAS_HEIGHT,
+  INITIAL_FIRE_RATE,
+  COLORS,
+  INITIAL_DAMAGE,
+  INITIAL_BULLET_SIZE,
+  INVINCIBLE_TIME,
+} from "./constants";
 import {
   Bullet,
   Enemy,
@@ -13,10 +21,15 @@ import {
   EnemyBullet,
   Obstacle,
   GravityField,
-  HeartItem
+  HeartItem,
 } from "./types";
 import { eventBus, EVENTS } from "./eventBus";
-import { WEAPON_CONFIG, ENEMY_ARCHETYPES, ENVIRONMENT_CONFIG, BalanceController } from "./gameData";
+import {
+  WEAPON_CONFIG,
+  ENEMY_ARCHETYPES,
+  ENVIRONMENT_CONFIG,
+  BalanceController,
+} from "./gameData";
 import { BaseEnemy } from "./enemies/BaseEnemy"; // [NEW]
 import { EnemyFactory } from "./enemies/EnemyFactory"; // [NEW]
 
@@ -41,7 +54,7 @@ export class GameEngine {
     maxHearts: 3,
     currentHealth: 6,
     invincibleTimer: 0,
-    heartScaleAnims: [] as number[]
+    heartScaleAnims: [] as number[],
   };
 
   private bullets: Bullet[] = [];
@@ -75,6 +88,10 @@ export class GameEngine {
   private cameraZoom = 1.0;
   private zoomTarget = 1.0;
 
+  private lastTime = 0;
+  private accumulator = 0;
+  private readonly FIXED_TIMESTEP = 1000 / 60;
+
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
     this.initEvents();
@@ -99,7 +116,7 @@ export class GameEngine {
     this.ctx.canvas.addEventListener("mousemove", handleInput);
     this.ctx.canvas.addEventListener(
       "touchmove",
-      e => {
+      (e) => {
         e.preventDefault();
         handleInput(e);
       },
@@ -174,13 +191,26 @@ export class GameEngine {
       const cannonLevel = this.upgradeLevels.get(UpgradeType.CANNON) || 0;
       const rangeLevel = this.upgradeLevels.get(UpgradeType.RANGE_BOOST) || 0;
 
-      if (cannonLevel >= 5 && rangeLevel >= 1 && this.player.weaponMode !== WeaponMode.BLACK_HOLE) {
+      if (
+        cannonLevel >= 5 &&
+        rangeLevel >= 1 &&
+        this.player.weaponMode !== WeaponMode.BLACK_HOLE
+      ) {
         this.player.weaponMode = WeaponMode.BLACK_HOLE;
         this.player.damageMultiplicative *= 2.0;
         eventBus.emit(EVENTS.TRIGGER_SOUND, "evo");
         this.shake(60);
         for (let i = 0; i < 30; i++)
-          this.spawnParticle(this.player.x, this.player.y, (Math.random() - 0.5) * 15, (Math.random() - 0.5) * 15, 8, "#bf00ff", 40, true);
+          this.spawnParticle(
+            this.player.x,
+            this.player.y,
+            (Math.random() - 0.5) * 15,
+            (Math.random() - 0.5) * 15,
+            8,
+            "#bf00ff",
+            40,
+            true
+          );
       }
     } catch (e) {
       console.error("Failed to apply upgrade:", e);
@@ -188,12 +218,36 @@ export class GameEngine {
   }
 
   private calculateDamage(): number {
-    return this.player.damageBase * (1 + this.player.damageAdditive) * this.player.damageMultiplicative * (1 + this.mercyBoost);
+    return (
+      this.player.damageBase *
+      (1 + this.player.damageAdditive) *
+      this.player.damageMultiplicative *
+      (1 + this.mercyBoost)
+    );
   }
 
-  private spawnParticle(x: number, y: number, vx: number, vy: number, size: number, color: string, life: number, glow = false) {
+  private spawnParticle(
+    x: number,
+    y: number,
+    vx: number,
+    vy: number,
+    size: number,
+    color: string,
+    life: number,
+    glow = false
+  ) {
     if (this.particles.length > this.maxParticles) return;
-    this.particles.push({ x, y, vx, vy, size, color, life, maxLife: life, glow });
+    this.particles.push({
+      x,
+      y,
+      vx,
+      vy,
+      size,
+      color,
+      life,
+      maxLife: life,
+      glow,
+    });
   }
 
   public reset() {
@@ -214,7 +268,7 @@ export class GameEngine {
       maxHearts: 3,
       currentHealth: 6,
       invincibleTimer: 0,
-      heartScaleAnims: [1, 1, 1]
+      heartScaleAnims: [1, 1, 1],
     };
     this.bullets = [];
     this.enemyBullets = [];
@@ -241,13 +295,17 @@ export class GameEngine {
 
   public start() {
     this.isPaused = false;
-    this.loop();
+    this.lastTime = performance.now();
+    this.accumulator = 0;
+    this.loop(performance.now());
   }
   public resume() {
     if (this.isPaused) {
       this.isPaused = false;
       this.zoomTarget = 1.0; // Reset zoom on resume
-      this.loop();
+      this.lastTime = performance.now();
+      this.accumulator = 0;
+      this.loop(performance.now());
     }
   }
 
@@ -260,9 +318,25 @@ export class GameEngine {
     return this.isPaused;
   }
 
-  private loop = () => {
+  private loop = (timestamp?: number) => {
     if (this.isPaused) return;
-    this.update();
+
+    if (timestamp === undefined) timestamp = performance.now();
+
+    const deltaTime = timestamp - this.lastTime;
+    this.lastTime = timestamp;
+
+    this.accumulator += deltaTime;
+
+    // Safety cap to prevent spiral of death
+    if (this.accumulator > 1000) this.accumulator = 1000;
+
+    // Fixed time step update
+    while (this.accumulator >= this.FIXED_TIMESTEP) {
+      this.update();
+      this.accumulator -= this.FIXED_TIMESTEP;
+    }
+
     this.draw();
     this.animationId = requestAnimationFrame(this.loop);
   };
@@ -292,7 +366,8 @@ export class GameEngine {
     }
 
     const framesSinceKill = this.frameCount - this.lastKillFrame;
-    if (framesSinceKill > 1800 && this.frameCount % 300 === 0) this.mercyBoost += 0.1;
+    if (framesSinceKill > 1800 && this.frameCount % 300 === 0)
+      this.mercyBoost += 0.1;
 
     let moveScale = 1;
     for (let i = this.gravityFields.length - 1; i >= 0; i--) {
@@ -312,8 +387,14 @@ export class GameEngine {
 
     this.player.x += (this.player.targetX - this.player.x) * moveScale;
     this.player.y += (this.player.targetY - this.player.y) * moveScale;
-    this.player.x = Math.max(this.player.radius, Math.min(CANVAS_WIDTH - this.player.radius, this.player.x));
-    this.player.y = Math.max(this.player.radius, Math.min(CANVAS_HEIGHT - this.player.radius, this.player.y));
+    this.player.x = Math.max(
+      this.player.radius,
+      Math.min(CANVAS_WIDTH - this.player.radius, this.player.x)
+    );
+    this.player.y = Math.max(
+      this.player.radius,
+      Math.min(CANVAS_HEIGHT - this.player.radius, this.player.y)
+    );
 
     if (this.shakeTimer > 0) this.shakeTimer--;
 
@@ -326,7 +407,10 @@ export class GameEngine {
       const eb = this.enemyBullets[i];
       eb.x += eb.vx;
       eb.y += eb.vy;
-      if ((eb.x - this.player.x) ** 2 + (eb.y - this.player.y) ** 2 < (eb.radius + this.player.radius * 0.6) ** 2) {
+      if (
+        (eb.x - this.player.x) ** 2 + (eb.y - this.player.y) ** 2 <
+        (eb.radius + this.player.radius * 0.6) ** 2
+      ) {
         this.takeDamage(eb.damage);
         this.enemyBullets.splice(i, 1);
         continue;
@@ -337,7 +421,12 @@ export class GameEngine {
     for (let i = this.obstacles.length - 1; i >= 0; i--) {
       const o = this.obstacles[i];
       o.y += 1.5;
-      if (this.player.x > o.x && this.player.x < o.x + o.width && this.player.y > o.y && this.player.y < o.y + o.height) {
+      if (
+        this.player.x > o.x &&
+        this.player.x < o.x + o.width &&
+        this.player.y > o.y &&
+        this.player.y < o.y + o.height
+      ) {
         this.takeDamage(1);
       }
       if (o.hp <= 0) {
@@ -359,7 +448,8 @@ export class GameEngine {
       if (o.y > CANVAS_HEIGHT + 100) this.obstacles.splice(i, 1);
     }
 
-    const hasVoltShot = (this.upgradeLevels.get(UpgradeType.VOLT_SHOT) || 0) > 0;
+    const hasVoltShot =
+      (this.upgradeLevels.get(UpgradeType.VOLT_SHOT) || 0) > 0;
     const energySynergy = (this.tagCounts.get(UpgradeTag.ENERGY) || 0) >= 3;
     const blastSynergy = (this.tagCounts.get(UpgradeTag.BLAST) || 0) >= 3;
 
@@ -382,7 +472,7 @@ export class GameEngine {
         }
 
         const bhConf = WEAPON_CONFIG[WeaponMode.BLACK_HOLE];
-        this.enemies.forEach(e => {
+        this.enemies.forEach((e) => {
           const dx = b.x - e.x;
           const dy = b.y - e.y;
           const distSq = dx * dx + dy * dy;
@@ -394,15 +484,21 @@ export class GameEngine {
         });
       }
 
-      this.obstacles.forEach(o => {
-        if (b.x > o.x && b.x < o.x + o.width && b.y > o.y && b.y < o.y + o.height) {
+      this.obstacles.forEach((o) => {
+        if (
+          b.x > o.x &&
+          b.x < o.x + o.width &&
+          b.y > o.y &&
+          b.y < o.y + o.height
+        ) {
           o.hp -= b.damage;
           this.spawnDamageNumber(b.x, b.y, b.damage, false);
           if (!b.isBlackHole) this.bullets.splice(i, 1);
         }
       });
       // Bounds check for non-Black Hole (Black hole dies by life)
-      if (!b.isBlackHole && (b.y < -120 || b.y > CANVAS_HEIGHT + 120)) this.bullets.splice(i, 1);
+      if (!b.isBlackHole && (b.y < -120 || b.y > CANVAS_HEIGHT + 120))
+        this.bullets.splice(i, 1);
     }
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
@@ -412,21 +508,27 @@ export class GameEngine {
 
       // [MODIFIED] Polymorphic Update with Context
       e.update({
-        player: { x: this.player.x, y: this.player.y, radius: this.player.radius },
+        player: {
+          x: this.player.x,
+          y: this.player.y,
+          radius: this.player.radius,
+        },
         frameCount: this.frameCount,
         enemies: this.enemies,
         spawnProjectile: (x, y, vx, vy, radius, damage) => {
           this.enemyBullets.push({ x, y, vx, vy, radius, damage });
         },
         spawnEnemy: (type, x, y) => {
-          this.enemies.push(EnemyFactory.createEnemy(type, this.level, CANVAS_WIDTH));
+          this.enemies.push(
+            EnemyFactory.createEnemy(type, this.level, CANVAS_WIDTH)
+          );
           // Manual override position as factory randomizes it usually
           const last = this.enemies[this.enemies.length - 1];
           if (last) {
             last.x = x;
             last.y = y;
           }
-        }
+        },
       });
       if (e.hitFlash > 0) e.hitFlash -= 0.15;
 
@@ -457,7 +559,11 @@ export class GameEngine {
         }
       }
 
-      if (i < this.enemies.length && (e.x - this.player.x) ** 2 + (e.y - this.player.y) ** 2 < (e.size * 0.7 + this.player.radius) ** 2) {
+      if (
+        i < this.enemies.length &&
+        (e.x - this.player.x) ** 2 + (e.y - this.player.y) ** 2 <
+          (e.size * 0.7 + this.player.radius) ** 2
+      ) {
         this.takeDamage(e.type === EnemyType.BOSS ? 2 : 1);
         // [FIX] Destroy non-boss enemies on impact (especially Kamikaze)
         if (e.type !== EnemyType.BOSS) {
@@ -465,12 +571,17 @@ export class GameEngine {
           this.enemies.splice(i, 1);
         }
       }
-      if (i < this.enemies.length && e.y > CANVAS_HEIGHT + 150) this.enemies.splice(i, 1);
+      if (i < this.enemies.length && e.y > CANVAS_HEIGHT + 150)
+        this.enemies.splice(i, 1);
     }
 
     if (!this.bossActive) {
       if (this.level % 5 === 0) this.spawnBoss();
-      else if (this.frameCount % BalanceController.getSpawnInterval(this.level) === 0) this.spawnEnemy();
+      else if (
+        this.frameCount % BalanceController.getSpawnInterval(this.level) ===
+        0
+      )
+        this.spawnEnemy();
       if (this.frameCount % 300 === 0) this.spawnEnvironment();
     }
 
@@ -486,7 +597,10 @@ export class GameEngine {
         h.y += (dy / d) * 10;
       }
       if (dsq < (this.player.radius + h.size) ** 2) {
-        this.player.currentHealth = Math.min(this.player.currentHealth + 2, this.player.maxHearts * 2);
+        this.player.currentHealth = Math.min(
+          this.player.currentHealth + 2,
+          this.player.maxHearts * 2
+        );
         eventBus.emit(EVENTS.TRIGGER_SOUND, "levelup");
         this.hearts.splice(i, 1);
         continue;
@@ -507,7 +621,10 @@ export class GameEngine {
       if (dx * dx + dy * dy < (this.player.radius + g.size) ** 2) {
         this.exp += g.value;
         this.gems.splice(i, 1);
-        eventBus.emit(EVENTS.EXP_UPDATED, { exp: this.exp, maxExp: this.maxExp });
+        eventBus.emit(EVENTS.EXP_UPDATED, {
+          exp: this.exp,
+          maxExp: this.maxExp,
+        });
         if (this.exp >= this.maxExp) this.levelUp();
       }
     }
@@ -529,7 +646,12 @@ export class GameEngine {
     }
   }
 
-  private spawnDamageNumber(x: number, y: number, damage: number, isCrit: boolean) {
+  private spawnDamageNumber(
+    x: number,
+    y: number,
+    damage: number,
+    isCrit: boolean
+  ) {
     this.damageNumbers.push({
       x: x + (Math.random() - 0.5) * 20,
       y: y - 20,
@@ -539,7 +661,7 @@ export class GameEngine {
       color: isCrit ? "#ff0000" : damage > 0 ? "#ffff00" : "#ffffff",
       life: 45,
       maxLife: 45,
-      isCrit
+      isCrit,
     });
     if (isCrit) this.shake(8);
   }
@@ -568,7 +690,9 @@ export class GameEngine {
     // [MODIFIED] Polymorphic Death Handler
     e.onDeath({
       spawnEnemy: (type, x, y) => {
-        this.enemies.push(EnemyFactory.createEnemy(type, this.level, CANVAS_WIDTH));
+        this.enemies.push(
+          EnemyFactory.createEnemy(type, this.level, CANVAS_WIDTH)
+        );
         // Manual override position
         const last = this.enemies[this.enemies.length - 1];
         if (last) {
@@ -581,7 +705,7 @@ export class GameEngine {
           // Adjustment: We'll accept Full HP for now (Harder) or manually nerf here?
           // Let's stick to Factory defaults for consistency, maybe slight oversight but cleaner.
         }
-      }
+      },
     });
 
     if (e.type === EnemyType.BOSS) {
@@ -589,7 +713,12 @@ export class GameEngine {
       this.score += 2000;
       // [NERF] Reduce XP to ~300 (was ~1050)
       for (let k = 0; k < 6; k++)
-        this.gems.push({ x: e.x + (Math.random() - 0.5) * 180, y: e.y + (Math.random() - 0.5) * 180, value: 50, size: 10 });
+        this.gems.push({
+          x: e.x + (Math.random() - 0.5) * 180,
+          y: e.y + (Math.random() - 0.5) * 180,
+          value: 50,
+          size: 10,
+        });
       // BOSS 必掉血包
       this.hearts.push({ x: e.x, y: e.y, size: 12, pulse: 0 });
     } else {
@@ -621,18 +750,27 @@ export class GameEngine {
     const { x, y, weaponMode } = this.player;
     const currentDamage = this.calculateDamage();
     const createB = (ox: number, isS = false) => {
-      const mode = this.player.weaponMode === WeaponMode.BLACK_HOLE && !isS ? WeaponMode.BLACK_HOLE : WeaponMode.STANDARD;
+      const mode =
+        this.player.weaponMode === WeaponMode.BLACK_HOLE && !isS
+          ? WeaponMode.BLACK_HOLE
+          : WeaponMode.STANDARD;
       const conf = WEAPON_CONFIG[mode];
       this.bullets.push({
         x: this.player.x + ox,
         y: this.player.y - (mode === WeaponMode.BLACK_HOLE ? 40 : 20),
         vx: 0,
         vy: conf.bulletSpeed,
-        radius: (mode === WeaponMode.BLACK_HOLE ? conf.bulletRadius : INITIAL_BULLET_SIZE) * this.player.bulletScale,
+        radius:
+          (mode === WeaponMode.BLACK_HOLE
+            ? conf.bulletRadius
+            : INITIAL_BULLET_SIZE) * this.player.bulletScale,
         damage: currentDamage * (mode === WeaponMode.BLACK_HOLE ? 1.5 : 1),
         trail: [],
         isBlackHole: mode === WeaponMode.BLACK_HOLE,
-        life: mode === WeaponMode.BLACK_HOLE ? WEAPON_CONFIG[mode].maxLife || 90 : undefined // [NEW] Set Life
+        life:
+          mode === WeaponMode.BLACK_HOLE
+            ? WEAPON_CONFIG[mode].maxLife || 90
+            : undefined, // [NEW] Set Life
       });
     };
     createB(0);
@@ -650,33 +788,60 @@ export class GameEngine {
 
   private spawnBoss() {
     this.bossActive = true;
-    this.enemies.push(EnemyFactory.createEnemy(EnemyType.BOSS, this.level, CANVAS_WIDTH));
+    this.enemies.push(
+      EnemyFactory.createEnemy(EnemyType.BOSS, this.level, CANVAS_WIDTH)
+    );
   }
 
   private spawnEnvironment() {
     if (Math.random() > 0.5) {
       const conf = ENVIRONMENT_CONFIG.obstacle;
       const hp = conf.hp * (1 + this.level / 10);
-      this.obstacles.push({ x: Math.random() * (CANVAS_WIDTH - 100), y: -100, width: conf.width, height: conf.height, hp, maxHp: hp });
+      this.obstacles.push({
+        x: Math.random() * (CANVAS_WIDTH - 100),
+        y: -100,
+        width: conf.width,
+        height: conf.height,
+        hp,
+        maxHp: hp,
+      });
     } else {
       const conf = ENVIRONMENT_CONFIG.gravityField;
-      this.gravityFields.push({ x: Math.random() * CANVAS_WIDTH, y: -150, radius: conf.radius, strength: conf.strength });
+      this.gravityFields.push({
+        x: Math.random() * CANVAS_WIDTH,
+        y: -150,
+        radius: conf.radius,
+        strength: conf.strength,
+      });
     }
   }
 
   private createExplosion(x: number, y: number, r: number, d: number) {
-    this.enemies.forEach(e => {
+    this.enemies.forEach((e) => {
       if ((e.x - x) ** 2 + (e.y - y) ** 2 < r * r) {
         e.hp -= d * 0.8;
         e.hitFlash = 1;
       }
     });
     for (let i = 0; i < 12; i++)
-      this.spawnParticle(x, y, (Math.random() - 0.5) * 22, (Math.random() - 0.5) * 22, 6, COLORS.BLAST, 20, true);
+      this.spawnParticle(
+        x,
+        y,
+        (Math.random() - 0.5) * 22,
+        (Math.random() - 0.5) * 22,
+        6,
+        COLORS.BLAST,
+        20,
+        true
+      );
   }
 
   private chainLightning(source: Enemy, d: number, range: number) {
-    const target = this.enemies.find(o => o !== source && (source.x - o.x) ** 2 + (source.y - o.y) ** 2 < range * range);
+    const target = this.enemies.find(
+      (o) =>
+        o !== source &&
+        (source.x - o.x) ** 2 + (source.y - o.y) ** 2 < range * range
+    );
     if (target) {
       target.hp -= d * 1.1;
       target.hitFlash = 1;
@@ -692,7 +857,16 @@ export class GameEngine {
   private explodeEnemy(e: BaseEnemy) {
     const c = e.type === EnemyType.BOSS ? 50 : 20;
     for (let i = 0; i < c; i++)
-      this.spawnParticle(e.x, e.y, (Math.random() - 0.5) * 20, (Math.random() - 0.5) * 20, Math.random() * 8 + 2, e.color, 40, true);
+      this.spawnParticle(
+        e.x,
+        e.y,
+        (Math.random() - 0.5) * 20,
+        (Math.random() - 0.5) * 20,
+        Math.random() * 8 + 2,
+        e.color,
+        40,
+        true
+      );
   }
 
   private shake(i: number) {
@@ -702,7 +876,12 @@ export class GameEngine {
     eventBus.emit(EVENTS.SHAKE_SCREEN, i);
   }
 
-  private drawHeart(x: number, y: number, size: number, mode: "full" | "half" | "empty") {
+  private drawHeart(
+    x: number,
+    y: number,
+    size: number,
+    mode: "full" | "half" | "empty"
+  ) {
     this.ctx.save();
     this.ctx.translate(x, y);
     this.ctx.scale(size / 24, size / 24);
@@ -781,14 +960,25 @@ export class GameEngine {
 
   private draw() {
     this.ctx.save();
-    if (this.shakeTimer > 0) this.ctx.translate((Math.random() - 0.5) * this.shakeTimer, (Math.random() - 0.5) * this.shakeTimer);
+    if (this.shakeTimer > 0)
+      this.ctx.translate(
+        (Math.random() - 0.5) * this.shakeTimer,
+        (Math.random() - 0.5) * this.shakeTimer
+      );
 
     this.ctx.fillStyle = COLORS.BACKGROUND;
     this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    this.gravityFields.forEach(f => {
+    this.gravityFields.forEach((f) => {
       const pulse = Math.sin(this.frameCount * 0.05) * 10;
-      const grad = this.ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.radius + pulse);
+      const grad = this.ctx.createRadialGradient(
+        f.x,
+        f.y,
+        0,
+        f.x,
+        f.y,
+        f.radius + pulse
+      );
       grad.addColorStop(0, COLORS.GRAVITY);
       grad.addColorStop(1, "transparent");
       this.ctx.fillStyle = grad;
@@ -797,7 +987,7 @@ export class GameEngine {
       this.ctx.fill();
     });
 
-    this.obstacles.forEach(o => {
+    this.obstacles.forEach((o) => {
       this.ctx.fillStyle = COLORS.OBSTACLE;
       this.ctx.strokeStyle = "rgba(255,255,255,0.2)";
       this.ctx.lineWidth = 2;
@@ -815,7 +1005,7 @@ export class GameEngine {
     });
 
     this.ctx.globalCompositeOperation = "lighter";
-    this.particles.forEach(p => {
+    this.particles.forEach((p) => {
       this.ctx.globalAlpha = p.life / p.maxLife;
       this.ctx.fillStyle = p.color;
       this.ctx.beginPath();
@@ -825,7 +1015,7 @@ export class GameEngine {
     this.ctx.globalAlpha = 1;
     this.ctx.globalCompositeOperation = "source-over";
 
-    this.gems.forEach(g => {
+    this.gems.forEach((g) => {
       this.ctx.fillStyle = COLORS.EXP;
       this.ctx.beginPath();
       this.ctx.arc(g.x, g.y, g.size, 0, Math.PI * 2);
@@ -835,12 +1025,12 @@ export class GameEngine {
       this.ctx.stroke();
     });
 
-    this.hearts.forEach(h => {
+    this.hearts.forEach((h) => {
       const pulse = Math.sin(this.frameCount * 0.1) * 3;
       this.drawHeart(h.x, h.y, h.size + pulse, "full");
     });
 
-    this.enemyBullets.forEach(eb => {
+    this.enemyBullets.forEach((eb) => {
       this.ctx.fillStyle = COLORS.ENEMY_BULLET;
       this.ctx.shadowBlur = 10;
       this.ctx.shadowColor = COLORS.ENEMY_BULLET;
@@ -850,9 +1040,16 @@ export class GameEngine {
       this.ctx.shadowBlur = 0;
     });
 
-    this.bullets.forEach(b => {
+    this.bullets.forEach((b) => {
       if (b.isBlackHole) {
-        const bhGrad = this.ctx.createRadialGradient(b.x, b.y, b.radius * 0.5, b.x, b.y, b.radius * 1.8);
+        const bhGrad = this.ctx.createRadialGradient(
+          b.x,
+          b.y,
+          b.radius * 0.5,
+          b.x,
+          b.y,
+          b.radius * 1.8
+        );
         bhGrad.addColorStop(0, "#000");
         bhGrad.addColorStop(0.6, "#4b0082");
         bhGrad.addColorStop(1, "transparent");
@@ -867,7 +1064,13 @@ export class GameEngine {
         this.ctx.strokeStyle = "#bf00ff";
         this.ctx.lineWidth = 3;
         this.ctx.beginPath();
-        this.ctx.arc(b.x, b.y, b.radius + Math.sin(this.frameCount * 0.2) * 5, 0, Math.PI * 2);
+        this.ctx.arc(
+          b.x,
+          b.y,
+          b.radius + Math.sin(this.frameCount * 0.2) * 5,
+          0,
+          Math.PI * 2
+        );
         this.ctx.stroke();
       } else {
         this.ctx.lineWidth = b.radius * 2;
@@ -886,12 +1089,12 @@ export class GameEngine {
       }
     });
 
-    this.enemies.forEach(e => {
+    this.enemies.forEach((e) => {
       e.draw(this.ctx);
     });
 
     this.ctx.textAlign = "center";
-    this.damageNumbers.forEach(dn => {
+    this.damageNumbers.forEach((dn) => {
       this.ctx.globalAlpha = dn.life / dn.maxLife;
       this.ctx.font = dn.isCrit ? "900 32px Monospace" : "800 20px Monospace";
       this.ctx.fillStyle = dn.color;
@@ -900,20 +1103,37 @@ export class GameEngine {
     this.ctx.globalAlpha = 1;
 
     // 玩家视觉补强：光晕与无敌闪烁
-    const pc = this.player.weaponMode === WeaponMode.BLACK_HOLE ? "#bf00ff" : COLORS.PLAYER;
+    const pc =
+      this.player.weaponMode === WeaponMode.BLACK_HOLE
+        ? "#bf00ff"
+        : COLORS.PLAYER;
     const isInvincible = this.player.invincibleTimer > 0;
-    const flicker = isInvincible ? Math.sin(Date.now() * 0.05) * 0.35 + 0.65 : 1.0;
+    const flicker = isInvincible
+      ? Math.sin(Date.now() * 0.05) * 0.35 + 0.65
+      : 1.0;
 
     this.ctx.globalAlpha = flicker;
     this.ctx.shadowBlur = 20;
     this.ctx.shadowColor = pc;
     this.ctx.fillStyle = pc;
     this.ctx.beginPath();
-    this.ctx.arc(this.player.x, this.player.y, this.player.radius, 0, Math.PI * 2);
+    this.ctx.arc(
+      this.player.x,
+      this.player.y,
+      this.player.radius,
+      0,
+      Math.PI * 2
+    );
     this.ctx.fill();
     this.ctx.fillStyle = "white";
     this.ctx.beginPath();
-    this.ctx.arc(this.player.x, this.player.y, this.player.radius * 0.45, 0, Math.PI * 2);
+    this.ctx.arc(
+      this.player.x,
+      this.player.y,
+      this.player.radius * 0.45,
+      0,
+      Math.PI * 2
+    );
     this.ctx.fill();
     this.ctx.shadowBlur = 0;
     this.ctx.globalAlpha = 1.0;
@@ -922,7 +1142,11 @@ export class GameEngine {
       this.ctx.fillStyle = "#ff0000";
       this.ctx.font = "bold 12px Orbitron";
       this.ctx.textAlign = "center";
-      this.ctx.fillText(`OVERLOAD: +${Math.round(this.mercyBoost * 100)}%`, this.player.x, this.player.y + 35);
+      this.ctx.fillText(
+        `OVERLOAD: +${Math.round(this.mercyBoost * 100)}%`,
+        this.player.x,
+        this.player.y + 35
+      );
     }
 
     this.drawHeartUI();
